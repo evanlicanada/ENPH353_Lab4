@@ -72,16 +72,30 @@ class My_App(QtWidgets.QMainWindow):
 		
 		if self._is_template_loaded:
 			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-			kp_frame, des_frame = self.sift.detectAndCompute(gray, None)
+			kp_frame, des_frame = self.sift.detectAndCompute(gray, None) # find key points andcamera frame descriptors for the 
 
+			# If descriptors for both exist
 			if des_frame is not None and self.des_template is not None:
-				matches = self.flann.knnMatch(self.des_template, des_frame, k=2)
+				matches = self.flann.knnMatch(self.des_template, des_frame, k=2) # compare reference and camera descriptors
+				# setting k to 2, we find the two closest matches for each descriptor, used to apply ratio test
 
+				# Apply "Lowe's ratio test"
+				# Basically if the best match is way better than the second best, then it's probably actually a good match
+				# throw out the rest
 				good_matches = []
 				for m, n in matches:
 					if m.distance < 0.7 * n.distance:
 						good_matches.append(m)
 
+				match_img = cv2.drawMatches(
+							self.template_gray, self.kp_template,
+							gray, kp_frame,
+							good_matches, None,
+							flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+						)
+				cv2.imshow("Feature Matches", match_img)
+
+				# If enough good matches are found, then we can try draw a homography
 				if len(good_matches) > 10:
 					src_pts = np.float32([self.kp_template[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
 					dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
@@ -95,9 +109,11 @@ class My_App(QtWidgets.QMainWindow):
 					else:
 						# No homography: draw keypoints
 						frame = cv2.drawKeypoints(frame, kp_frame, None, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+						
 				else:
 					# Not enough matches: draw keypoints
 					frame = cv2.drawKeypoints(frame, kp_frame, None, (255, 0, 0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
 
 		pixmap = self.convert_cv_to_pixmap(frame)
 		self.live_image_label.setPixmap(pixmap)
